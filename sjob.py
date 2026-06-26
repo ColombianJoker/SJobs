@@ -128,7 +128,10 @@ def run_jobs(globals_cfg, jobs_cfg):
                 )
                 log(f"Found {len(files)} files matching expression.", timefmt)
                 if files:
-                    log(f"Files to process: {', '.join(files)}", timefmt)
+                    log(
+                        f"Files to process (showing up to 5): {', '.join(files[:5])}",
+                        timefmt,
+                    )
             else:
                 log(f"Starting job: {title}", timefmt)
 
@@ -162,7 +165,10 @@ def run_jobs(globals_cfg, jobs_cfg):
                 )
                 log(f"Found {len(files)} files matching expression.", timefmt)
                 if files:
-                    log(f"Files to process: {', '.join(files)}", timefmt)
+                    log(
+                        f"Files to process (showing up to 5): {', '.join(files[:5])}",
+                        timefmt,
+                    )
             else:
                 log(f"Starting job: {title}", timefmt)
 
@@ -196,7 +202,10 @@ def run_jobs(globals_cfg, jobs_cfg):
                 )
                 log(f"Found {len(files)} files matching expression.", timefmt)
                 if files:
-                    log(f"Files to process: {', '.join(files)}", timefmt)
+                    log(
+                        f"Files to process (showing up to 5): {', '.join(files[:5])}",
+                        timefmt,
+                    )
             else:
                 log(f"Starting job: {title}", timefmt)
 
@@ -234,9 +243,8 @@ def run_jobs(globals_cfg, jobs_cfg):
                 )
                 log(f"Found {len(files)} files matching expression.", timefmt)
                 if files:
-                    display_files = files if multiple else files[:5]
                     log(
-                        f"Files to process (showing up to 5 if not multiple): {', '.join(display_files)}",
+                        f"Files to process (showing up to 5): {', '.join(files[:5])}",
                         timefmt,
                     )
             else:
