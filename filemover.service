@@ -5,7 +5,7 @@ After=network.target local-fs.target
 [Service]
 Type=simple
 # The command to execute along with the configuration file argument
-ExecStart=/usr/local/bin/sjob /etc/sjob.conf
+ExecStart=/usr/local/bin/sjob -s /etc/sjob.conf
 # Automatically restart the service if it crashes or is killed
 Restart=always
 RestartSec=10

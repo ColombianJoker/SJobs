@@ -1,5 +1,6 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S python3 -u
 
+import argparse
 import glob
 import os
 import re
@@ -84,9 +85,12 @@ def parse_config(filepath):
     return globals_cfg, jobs_cfg
 
 
-def log(msg, timefmt):
-    now = datetime.now().strftime(timefmt)
-    print(f"[{now}] {msg}")
+def log(msg, timefmt, strip_timestamp=False):
+    if strip_timestamp:
+        print(msg)
+    else:
+        now = datetime.now().strftime(timefmt)
+        print(f"[{now}] {msg}")
 
 
 def get_files(source_dir, expr):
@@ -96,7 +100,7 @@ def get_files(source_dir, expr):
     return [f for f in files if os.path.isfile(f)]
 
 
-def run_jobs(globals_cfg, jobs_cfg):
+def run_jobs(globals_cfg, jobs_cfg, strip_timestamp):
     debug = globals_cfg["DEBUG"]
     dry_run = globals_cfg["DRY_RUN"]
     timefmt = globals_cfg["TIMEFMT"]
@@ -106,7 +110,6 @@ def run_jobs(globals_cfg, jobs_cfg):
 
         # Determine job type
         if "COPY_JOB" in job:
-            job_type = "COPY"
             title = job["COPY_JOB"]
             source = job.get("COPY_SOURCE")
             target = job.get("COPY_TARGET")
@@ -116,6 +119,7 @@ def run_jobs(globals_cfg, jobs_cfg):
                 log(
                     f"WARNING: Job {idx} ({title}) missing mandatory SOURCE or TARGET. Skipping.",
                     timefmt,
+                    strip_timestamp,
                 )
                 continue
 
@@ -125,25 +129,30 @@ def run_jobs(globals_cfg, jobs_cfg):
                 log(
                     f"Starting COPY Job: '{title}' | Source: {source} | Target: {target} | Expr: {expr}",
                     timefmt,
+                    strip_timestamp,
                 )
-                log(f"Found {len(files)} files matching expression.", timefmt)
+                log(
+                    f"Found {len(files)} files matching expression.",
+                    timefmt,
+                    strip_timestamp,
+                )
                 if files:
                     log(
                         f"Files to process (showing up to 5): {', '.join(files[:5])}",
                         timefmt,
+                        strip_timestamp,
                     )
             else:
-                log(f"Starting job: {title}", timefmt)
+                log(f"Starting job: {title}", timefmt, strip_timestamp)
 
             for f in files:
                 if not dry_run:
                     os.makedirs(target, exist_ok=True)
                     shutil.copy2(f, target)
 
-            log(f"Job '{title}' done.", timefmt)
+            log(f"Job '{title}' done.", timefmt, strip_timestamp)
 
         elif "MOVE_JOB" in job:
-            job_type = "MOVE"
             title = job["MOVE_JOB"]
             source = job.get("MOVE_SOURCE")
             target = job.get("MOVE_TARGET")
@@ -153,6 +162,7 @@ def run_jobs(globals_cfg, jobs_cfg):
                 log(
                     f"WARNING: Job {idx} ({title}) missing mandatory SOURCE or TARGET. Skipping.",
                     timefmt,
+                    strip_timestamp,
                 )
                 continue
 
@@ -162,15 +172,21 @@ def run_jobs(globals_cfg, jobs_cfg):
                 log(
                     f"Starting MOVE Job: '{title}' | Source: {source} | Target: {target} | Expr: {expr}",
                     timefmt,
+                    strip_timestamp,
                 )
-                log(f"Found {len(files)} files matching expression.", timefmt)
+                log(
+                    f"Found {len(files)} files matching expression.",
+                    timefmt,
+                    strip_timestamp,
+                )
                 if files:
                     log(
                         f"Files to process (showing up to 5): {', '.join(files[:5])}",
                         timefmt,
+                        strip_timestamp,
                     )
             else:
-                log(f"Starting job: {title}", timefmt)
+                log(f"Starting job: {title}", timefmt, strip_timestamp)
 
             for f in files:
                 if not dry_run:
@@ -178,10 +194,9 @@ def run_jobs(globals_cfg, jobs_cfg):
                     target_path = os.path.join(target, os.path.basename(f))
                     shutil.move(f, target_path)
 
-            log(f"Job '{title}' done.", timefmt)
+            log(f"Job '{title}' done.", timefmt, strip_timestamp)
 
         elif "REMOVE_JOB" in job:
-            job_type = "REMOVE"
             title = job["REMOVE_JOB"]
             source = job.get("REMOVE_SOURCE")
             expr = job.get("REMOVE_EXPR", "*")
@@ -190,6 +205,7 @@ def run_jobs(globals_cfg, jobs_cfg):
                 log(
                     f"WARNING: Job {idx} ({title}) missing mandatory SOURCE. Skipping.",
                     timefmt,
+                    strip_timestamp,
                 )
                 continue
 
@@ -199,27 +215,32 @@ def run_jobs(globals_cfg, jobs_cfg):
                 log(
                     f"Starting REMOVE Job: '{title}' | Source: {source} | Expr: {expr}",
                     timefmt,
+                    strip_timestamp,
                 )
-                log(f"Found {len(files)} files matching expression.", timefmt)
+                log(
+                    f"Found {len(files)} files matching expression.",
+                    timefmt,
+                    strip_timestamp,
+                )
                 if files:
                     log(
                         f"Files to process (showing up to 5): {', '.join(files[:5])}",
                         timefmt,
+                        strip_timestamp,
                     )
             else:
-                log(f"Starting job: {title}", timefmt)
+                log(f"Starting job: {title}", timefmt, strip_timestamp)
 
             for f in files:
                 if not dry_run:
                     try:
                         os.remove(f)
                     except OSError as e:
-                        log(f"Error removing file {f}: {e}", timefmt)
+                        log(f"Error removing file {f}: {e}", timefmt, strip_timestamp)
 
-            log(f"Job '{title}' done.", timefmt)
+            log(f"Job '{title}' done.", timefmt, strip_timestamp)
 
         elif "CMD_JOB" in job:
-            job_type = "CMD"
             title = job["CMD_JOB"]
             source = job.get("CMD_SOURCE")
             command = job.get("CMD_COMMAND")
@@ -231,6 +252,7 @@ def run_jobs(globals_cfg, jobs_cfg):
                 log(
                     f"WARNING: Job {idx} ({title}) missing mandatory SOURCE or COMMAND. Skipping.",
                     timefmt,
+                    strip_timestamp,
                 )
                 continue
 
@@ -240,78 +262,86 @@ def run_jobs(globals_cfg, jobs_cfg):
                 log(
                     f"Starting CMD Job: '{title}' | Source: {source} | Command: {command} | Expr: {expr}",
                     timefmt,
+                    strip_timestamp,
                 )
-                log(f"Found {len(files)} files matching expression.", timefmt)
+                log(
+                    f"Found {len(files)} files matching expression.",
+                    timefmt,
+                    strip_timestamp,
+                )
                 if files:
                     log(
                         f"Files to process (showing up to 5): {', '.join(files[:5])}",
                         timefmt,
+                        strip_timestamp,
                     )
             else:
-                log(f"Starting job: {title}", timefmt)
+                log(f"Starting job: {title}", timefmt, strip_timestamp)
 
             if not files:
-                log(f"Job '{title}' done (no files).", timefmt)
+                log(f"Job '{title}' done (no files).", timefmt, strip_timestamp)
                 continue
 
             if multiple:
-                # Process all files at once as a space-separated string
                 safe_files = " ".join([shlex.quote(f) for f in files])
                 cmd_to_run = command.replace(replace_str, safe_files)
                 if debug:
-                    log(f"Executing: {cmd_to_run}", timefmt)
+                    log(f"Executing: {cmd_to_run}", timefmt, strip_timestamp)
                 if not dry_run:
                     subprocess.run(cmd_to_run, shell=True)
             else:
-                # Process each file individually
                 for f in files:
                     cmd_to_run = command.replace(replace_str, shlex.quote(f))
                     if debug:
-                        log(f"Executing: {cmd_to_run}", timefmt)
+                        log(f"Executing: {cmd_to_run}", timefmt, strip_timestamp)
                     if not dry_run:
                         subprocess.run(cmd_to_run, shell=True)
 
-            log(f"Job '{title}' done.", timefmt)
+            log(f"Job '{title}' done.", timefmt, strip_timestamp)
 
 
 def main():
-    if len(sys.argv) < 2:
-        print("Usage: python3 sjob.py <config_file>")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(description="sjob File Processing Runner")
+    parser.add_argument("config", help="Path to the configuration file")
+    parser.add_argument(
+        "-s",
+        "--systemd",
+        action="store_true",
+        help="Disable showing internal script timestamps (useful for systemd/journalctl logs)",
+    )
 
-    config_file = sys.argv[1]
-    globals_cfg, jobs_cfg = parse_config(config_file)
+    args = parser.parse_args()
 
+    globals_cfg, jobs_cfg = parse_config(args.config)
     timefmt = globals_cfg["TIMEFMT"]
+    strip_ts = args.systemd
 
     if globals_cfg["DEBUG"]:
-        log("=== INITIALIZING JOB RUNNER ===", timefmt)
-        log(f"DEBUG: {globals_cfg['DEBUG']}", timefmt)
-        log(f"DELAY: {globals_cfg['DELAY']} seconds", timefmt)
-        log(f"TIMEFMT: {globals_cfg['TIMEFMT']}", timefmt)
-        log(f"DRY_RUN: {globals_cfg['DRY_RUN']}", timefmt)
-        log("===============================", timefmt)
+        log("=== INITIALIZING JOB RUNNER ===", timefmt, strip_ts)
+        log(f"DEBUG: {globals_cfg['DEBUG']}", timefmt, strip_ts)
+        log(f"DELAY: {globals_cfg['DELAY']} seconds", timefmt, strip_ts)
+        log(f"TIMEFMT: {globals_cfg['TIMEFMT']}", timefmt, strip_ts)
+        log(f"DRY_RUN: {globals_cfg['DRY_RUN']}", timefmt, strip_ts)
+        log("===============================", timefmt, strip_ts)
 
-    # Main infinite execution loop
     try:
         while True:
             if not jobs_cfg:
-                log("No jobs found in configuration. Exiting.", timefmt)
+                log("No jobs found in configuration. Exiting.", timefmt, strip_ts)
                 break
 
-            run_jobs(globals_cfg, jobs_cfg)
+            run_jobs(globals_cfg, jobs_cfg, strip_ts)
 
             if globals_cfg["DELAY"] > 0:
                 if globals_cfg["DEBUG"]:
                     log(
                         f"All jobs finished. Waiting for {globals_cfg['DELAY']} seconds before next loop...",
                         timefmt,
+                        strip_ts,
                     )
                 time.sleep(globals_cfg["DELAY"])
             else:
-                # If delay is 0, exit loop to prevent unbounded CPU thrashing unless explicit delay is set.
-                # If you want it to run constantly with 0 delay, remove this break.
-                log("Delay is 0. Running once and exiting.", timefmt)
+                log("Delay is 0. Running once and exiting.", timefmt, strip_ts)
                 break
 
     except KeyboardInterrupt:
