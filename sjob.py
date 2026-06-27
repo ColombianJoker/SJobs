@@ -18,22 +18,36 @@ def parse_bool(value, default=False):
     return str(value).strip().lower() in ("yes", "true", "1")
 
 
-def parse_delay(value):
+def parse_time_str(value, default_val=None):
+    """Parses a time string (s, m, h, d) into seconds."""
     if not value:
-        return 0
+        return default_val
     val = str(value).strip().lower()
     try:
-        if val.endswith("m"):
-            return int(val[:-1]) * 60
+        if val.endswith("d"):
+            return int(val[:-1]) * 86400
         elif val.endswith("h"):
             return int(val[:-1]) * 3600
+        elif val.endswith("m"):
+            return int(val[:-1]) * 60
         elif val.endswith("s"):
             return int(val[:-1])
         else:
             return int(val)
     except ValueError:
+        print(f"Error parsing time value '{value}'.")
+        return default_val
+
+
+def parse_delay(value):
+    """Specific parser for DELAY to maintain backward compatibility."""
+    if not value:
+        return 0
+    res = parse_time_str(value, default_val=None)
+    if res is None:
         print(f"Error parsing DELAY value '{value}'. Defaulting to 60 seconds.")
         return 60
+    return res
 
 
 def parse_config(filepath):
@@ -93,11 +107,42 @@ def log(msg, timefmt, strip_timestamp=False):
         print(f"[{now}] {msg}")
 
 
-def get_files(source_dir, expr):
+def get_files(source_dir, expr, older_sec=None, newer_sec=None):
+    """Fetches files matching glob, optionally filtering by age in seconds."""
     search_path = os.path.join(source_dir, expr)
     files = glob.glob(search_path)
-    # Ensure we only process files, not directories
-    return [f for f in files if os.path.isfile(f)]
+
+    valid_files = []
+    now = time.time()
+
+    for f in files:
+        if not os.path.isfile(f):
+            continue
+
+        # If no time filters are set, add it right away
+        if older_sec is None and newer_sec is None:
+            valid_files.append(f)
+            continue
+
+        try:
+            # Get file modification time
+            mtime = os.path.getmtime(f)
+            age_in_seconds = now - mtime
+
+            # If the file is strictly younger/equal to older_sec, we don't want it (must be OLDER than)
+            if older_sec is not None and age_in_seconds <= older_sec:
+                continue
+
+            # If the file is strictly older/equal to newer_sec, we don't want it (must be NEWER than)
+            if newer_sec is not None and age_in_seconds >= newer_sec:
+                continue
+
+            valid_files.append(f)
+        except OSError:
+            # File might have been deleted or we lack permissions to stat it
+            pass
+
+    return valid_files
 
 
 def run_jobs(globals_cfg, jobs_cfg, strip_timestamp):
@@ -114,6 +159,8 @@ def run_jobs(globals_cfg, jobs_cfg, strip_timestamp):
             source = job.get("COPY_SOURCE")
             target = job.get("COPY_TARGET")
             expr = job.get("COPY_EXPR", "*")
+            older = parse_time_str(job.get("COPY_OLDER"))
+            newer = parse_time_str(job.get("COPY_NEWER"))
 
             if not source or not target:
                 log(
@@ -123,16 +170,18 @@ def run_jobs(globals_cfg, jobs_cfg, strip_timestamp):
                 )
                 continue
 
-            files = get_files(source, expr)
+            files = get_files(source, expr, older, newer)
 
             if debug:
+                age_flt = f" | Older: {older}s" if older else ""
+                age_flt += f" | Newer: {newer}s" if newer else ""
                 log(
-                    f"Starting COPY Job: '{title}' | Source: {source} | Target: {target} | Expr: {expr}",
+                    f"Starting COPY Job: '{title}' | Source: {source} | Target: {target} | Expr: {expr}{age_flt}",
                     timefmt,
                     strip_timestamp,
                 )
                 log(
-                    f"Found {len(files)} files matching expression.",
+                    f"Found {len(files)} files matching criteria.",
                     timefmt,
                     strip_timestamp,
                 )
@@ -157,6 +206,8 @@ def run_jobs(globals_cfg, jobs_cfg, strip_timestamp):
             source = job.get("MOVE_SOURCE")
             target = job.get("MOVE_TARGET")
             expr = job.get("MOVE_EXPR", "*")
+            older = parse_time_str(job.get("MOVE_OLDER"))
+            newer = parse_time_str(job.get("MOVE_NEWER"))
 
             if not source or not target:
                 log(
@@ -166,16 +217,18 @@ def run_jobs(globals_cfg, jobs_cfg, strip_timestamp):
                 )
                 continue
 
-            files = get_files(source, expr)
+            files = get_files(source, expr, older, newer)
 
             if debug:
+                age_flt = f" | Older: {older}s" if older else ""
+                age_flt += f" | Newer: {newer}s" if newer else ""
                 log(
-                    f"Starting MOVE Job: '{title}' | Source: {source} | Target: {target} | Expr: {expr}",
+                    f"Starting MOVE Job: '{title}' | Source: {source} | Target: {target} | Expr: {expr}{age_flt}",
                     timefmt,
                     strip_timestamp,
                 )
                 log(
-                    f"Found {len(files)} files matching expression.",
+                    f"Found {len(files)} files matching criteria.",
                     timefmt,
                     strip_timestamp,
                 )
@@ -200,6 +253,8 @@ def run_jobs(globals_cfg, jobs_cfg, strip_timestamp):
             title = job["REMOVE_JOB"]
             source = job.get("REMOVE_SOURCE")
             expr = job.get("REMOVE_EXPR", "*")
+            older = parse_time_str(job.get("REMOVE_OLDER"))
+            newer = parse_time_str(job.get("REMOVE_NEWER"))
 
             if not source:
                 log(
@@ -209,16 +264,18 @@ def run_jobs(globals_cfg, jobs_cfg, strip_timestamp):
                 )
                 continue
 
-            files = get_files(source, expr)
+            files = get_files(source, expr, older, newer)
 
             if debug:
+                age_flt = f" | Older: {older}s" if older else ""
+                age_flt += f" | Newer: {newer}s" if newer else ""
                 log(
-                    f"Starting REMOVE Job: '{title}' | Source: {source} | Expr: {expr}",
+                    f"Starting REMOVE Job: '{title}' | Source: {source} | Expr: {expr}{age_flt}",
                     timefmt,
                     strip_timestamp,
                 )
                 log(
-                    f"Found {len(files)} files matching expression.",
+                    f"Found {len(files)} files matching criteria.",
                     timefmt,
                     strip_timestamp,
                 )
@@ -247,6 +304,8 @@ def run_jobs(globals_cfg, jobs_cfg, strip_timestamp):
             expr = job.get("CMD_EXPR", "*")
             replace_str = job.get("CMD_REPLACE", "{}")
             multiple = parse_bool(job.get("CMD_MULTIPLE"), False)
+            older = parse_time_str(job.get("CMD_OLDER"))
+            newer = parse_time_str(job.get("CMD_NEWER"))
 
             if not source or not command:
                 log(
@@ -256,16 +315,18 @@ def run_jobs(globals_cfg, jobs_cfg, strip_timestamp):
                 )
                 continue
 
-            files = get_files(source, expr)
+            files = get_files(source, expr, older, newer)
 
             if debug:
+                age_flt = f" | Older: {older}s" if older else ""
+                age_flt += f" | Newer: {newer}s" if newer else ""
                 log(
-                    f"Starting CMD Job: '{title}' | Source: {source} | Command: {command} | Expr: {expr}",
+                    f"Starting CMD Job: '{title}' | Source: {source} | Command: {command} | Expr: {expr}{age_flt}",
                     timefmt,
                     strip_timestamp,
                 )
                 log(
-                    f"Found {len(files)} files matching expression.",
+                    f"Found {len(files)} files matching criteria.",
                     timefmt,
                     strip_timestamp,
                 )
@@ -315,11 +376,12 @@ def main():
     globals_cfg, jobs_cfg = parse_config(args.config)
     timefmt = globals_cfg["TIMEFMT"]
     strip_ts = args.systemd
+    delay = globals_cfg["DELAY"]
 
     if globals_cfg["DEBUG"]:
         log("=== INITIALIZING JOB RUNNER ===", timefmt, strip_ts)
         log(f"DEBUG: {globals_cfg['DEBUG']}", timefmt, strip_ts)
-        log(f"DELAY: {globals_cfg['DELAY']} seconds", timefmt, strip_ts)
+        log(f"DELAY: {delay} seconds", timefmt, strip_ts)
         log(f"TIMEFMT: {globals_cfg['TIMEFMT']}", timefmt, strip_ts)
         log(f"DRY_RUN: {globals_cfg['DRY_RUN']}", timefmt, strip_ts)
         log("===============================", timefmt, strip_ts)
@@ -330,16 +392,29 @@ def main():
                 log("No jobs found in configuration. Exiting.", timefmt, strip_ts)
                 break
 
+            # Record the start time of this loop iteration
+            loop_start_time = time.time()
+
             run_jobs(globals_cfg, jobs_cfg, strip_ts)
 
-            if globals_cfg["DELAY"] > 0:
+            if delay > 0:
+                # Calculate how long the jobs took to run
+                elapsed_time = time.time() - loop_start_time
+
+                # Determine how long to sleep
+                if delay > elapsed_time:
+                    wait_time = delay - elapsed_time
+                else:
+                    wait_time = delay
+
                 if globals_cfg["DEBUG"]:
                     log(
-                        f"All jobs finished. Waiting for {globals_cfg['DELAY']} seconds before next loop...",
+                        f"All jobs finished. Time spent: {elapsed_time:.2f}s. Waiting for {wait_time:.2f}s before next loop...",
                         timefmt,
                         strip_ts,
                     )
-                time.sleep(globals_cfg["DELAY"])
+
+                time.sleep(wait_time)
             else:
                 log("Delay is 0. Running once and exiting.", timefmt, strip_ts)
                 break
