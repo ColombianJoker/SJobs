@@ -1,6 +1,13 @@
 #include <ctype.h>
 #include <errno.h>
+#include <unistd.h>
+
+#if defined(__unix__) || defined(__AIX__) || defined(_AIX)
+/* getopt is already provided by unistd.h on AIX */
+#else
 #include <getopt.h>
+#endif
+
 #include <glob.h>
 #include <libgen.h>
 #include <stdbool.h>
