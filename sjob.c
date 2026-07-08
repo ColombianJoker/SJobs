@@ -1,13 +1,6 @@
 #include <ctype.h>
 #include <errno.h>
-#include <unistd.h>
-
-#if defined(__unix__) || defined(__AIX__) || defined(_AIX)
-/* getopt is already provided by unistd.h on AIX */
-#else
-#include <getopt.h>
-#endif
-
+#include <fcntl.h>
 #include <glob.h>
 #include <libgen.h>
 #include <stdbool.h>
@@ -15,8 +8,24 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/time.h>
+#include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
+
+// Handle getopt portability across Linux, macOS, and AIX
+#if defined(__unix__) || defined(__AIX__) || defined(_AIX) || defined(__APPLE__)
+#include <unistd.h>
+#else
+#include <getopt.h>
+#endif
+
+// For high-performance file copying where available
+#if defined(__APPLE__)
+#include <copyfile.h>
+#elif defined(__linux__)
+#include <sys/sendfile.h>
+#endif
 
 #define MAX_JOBS 1000
 #define MAX_STR 1024
@@ -51,7 +60,7 @@ typedef struct {
   int max_job_id;
 } Config;
 
-// Helper: Trim whitespace and quotes
+// Helpers
 char *trim(char *str) {
   while (isspace((unsigned char)*str))
     str++;
@@ -61,8 +70,6 @@ char *trim(char *str) {
   while (end > str && isspace((unsigned char)*end))
     end--;
   end[1] = '\0';
-
-  // Remove surrounding quotes if present
   if ((str[0] == '"' && str[strlen(str) - 1] == '"') ||
       (str[0] == '\'' && str[strlen(str) - 1] == '\'')) {
     str[strlen(str) - 1] = '\0';
@@ -71,7 +78,6 @@ char *trim(char *str) {
   return str;
 }
 
-// Helper: Parse boolean
 bool parse_bool(const char *val, bool def) {
   if (!val || !*val)
     return def;
@@ -84,14 +90,12 @@ bool parse_bool(const char *val, bool def) {
   return def;
 }
 
-// Helper: Parse time string (s, m, h, d)
 int parse_time_str(const char *val, int def) {
   if (!val || !*val)
     return def;
   int len = strlen(val);
   int multiplier = 1;
   char last = tolower((unsigned char)val[len - 1]);
-
   if (isalpha(last)) {
     if (last == 'd')
       multiplier = 86400;
@@ -102,11 +106,9 @@ int parse_time_str(const char *val, int def) {
     else if (last == 's')
       multiplier = 1;
   }
-  int t = atoi(val);
-  return t * multiplier;
+  return atoi(val) * multiplier;
 }
 
-// Helper: Log message
 void log_msg(Config *cfg, const char *msg) {
   if (cfg->strip_ts) {
     printf("%s\n", msg);
@@ -120,7 +122,6 @@ void log_msg(Config *cfg, const char *msg) {
   fflush(stdout);
 }
 
-// Ensure directory exists (mkdir -p)
 void mkdir_p(const char *path) {
   char tmp[MAX_STR];
   snprintf(tmp, sizeof(tmp), "%s", path);
@@ -137,34 +138,110 @@ void mkdir_p(const char *path) {
   mkdir(tmp, 0755);
 }
 
-// File copy
-int copy_file(const char *src, const char *dst) {
-  FILE *in = fopen(src, "rb");
-  if (!in)
-    return -1;
-  FILE *out = fopen(dst, "wb");
-  if (!out) {
-    fclose(in);
+// Portable metadata cloning function
+int clone_metadata(const char *src, const char *dst, struct stat *st) {
+  // 1. Preserve Owner and Group (May require root/sudo for chown to other
+  // users)
+  if (chown(dst, st->st_uid, st->st_gid) != 0) {
+    // Soft-fail: Log or ignore if running as non-root user
+  }
+
+  // 2. Preserve Permissions (chmod)
+  if (chmod(dst, st->st_mode & 07777) != 0) {
     return -1;
   }
 
-  char buf[8192];
-  size_t n;
-  while ((n = fread(buf, 1, sizeof(buf), in)) > 0) {
-    fwrite(buf, 1, n, out);
+  // 3. Preserve Access and Modification Timestamps (utimes)
+  struct timeval tv[2];
+#if defined(__APPLE__)
+  tv[0].tv_sec = st->st_atimespec.tv_sec;
+  tv[0].tv_usec = st->st_atimespec.tv_nsec / 1000;
+  tv[1].tv_sec = st->st_mtimespec.tv_sec;
+  tv[1].tv_usec = st->st_mtimespec.tv_nsec / 1000;
+#else
+  tv[0].tv_sec = st->st_atime;
+  tv[0].tv_usec = 0;
+  tv[1].tv_sec = st->st_mtime;
+  tv[1].tv_usec = 0;
+#endif
+
+  if (utimes(dst, tv) != 0) {
+    return -1;
   }
 
-  fclose(in);
-  fclose(out);
   return 0;
 }
 
-// File move (handles cross-device)
-int move_file(const char *src, const char *dst) {
+// Enhanced file copy that preserves attributes
+int copy_file_preserve(const char *src, const char *dst) {
+  struct stat st;
+  if (stat(src, &st) != 0)
+    return -1;
+
+#if defined(__APPLE__)
+  // macOS native high-performance copy metadata + data api
+  if (copyfile(src, dst, NULL, COPYFILE_ALL) != 0)
+    return -1;
+  return 0;
+#else
+  // Linux / AIX / Generic POSIX implementation
+  int in_fd = open(src, O_RDONLY);
+  if (in_fd < 0)
+    return -1;
+
+  // Create destination with temporary default permissions
+  int out_fd = open(dst, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+  if (out_fd < 0) {
+    close(in_fd);
+    return -1;
+  }
+
+#if defined(__linux__)
+  // Linux zero-copy system optimization
+  off_t bytes_copied = 0;
+  while (bytes_copied < st.st_size) {
+    ssize_t res =
+        sendfile(out_fd, in_fd, &bytes_copied, st.st_size - bytes_copied);
+    if (res < 0) {
+      if (errno == EINTR)
+        continue;
+      break;
+    }
+  }
+#else
+  // Standard fallback read/write loop (AIX and others)
+  char buf[16384];
+  ssize_t n_read;
+  while ((n_read = read(in_fd, buf, sizeof(buf))) > 0) {
+    ssize_t n_written = 0;
+    while (n_written < n_read) {
+      ssize_t res = write(out_fd, buf + n_written, n_read - n_written);
+      if (res < 0) {
+        if (errno == EINTR)
+          continue;
+        break;
+      }
+      n_written += res;
+    }
+  }
+#endif
+
+  close(in_fd);
+  close(out_fd);
+
+  // Synchronize all metadata mappings manually
+  return clone_metadata(src, dst, &st);
+#endif
+}
+
+int move_file_preserve(const char *src, const char *dst) {
+  // If files are on the same filesystem, rename() keeps attributes inherently.
   if (rename(src, dst) == 0)
     return 0;
-  if (errno == EXDEV) { // Cross-device link
-    if (copy_file(src, dst) == 0) {
+
+  // Cross-device boundary shift fallback (EXDEV)
+  if (errno == EXDEV) {
+    if (copy_file_preserve(src, dst) == 0) {
       unlink(src);
       return 0;
     }
@@ -172,7 +249,6 @@ int move_file(const char *src, const char *dst) {
   return -1;
 }
 
-// Shell escaping
 void shell_quote(const char *src, char *dst, size_t dst_size) {
   size_t pos = 0;
   if (pos < dst_size - 1)
@@ -193,7 +269,6 @@ void shell_quote(const char *src, char *dst, size_t dst_size) {
   dst[pos] = '\0';
 }
 
-// String replace
 void str_replace(const char *orig, const char *rep, const char *with, char *dst,
                  size_t dst_size) {
   const char *tmp = orig;
@@ -215,7 +290,6 @@ void str_replace(const char *orig, const char *rep, const char *with, char *dst,
   dst[dst_size - 1] = '\0';
 }
 
-// Configuration Parser
 void parse_config(const char *filepath, Config *cfg) {
   memset(cfg, 0, sizeof(Config));
   strcpy(cfg->timefmt, "%Y-%m-%d %H:%M:%S");
@@ -255,11 +329,8 @@ void parse_config(const char *filepath, Config *cfg) {
     else if (strcmp(key, "TIMEFMT") == 0)
       strcpy(cfg->timefmt, val);
     else {
-      // Check for numbered parameters
       char prefix[MAX_STR] = {0};
       int id = -1;
-
-      // Extract trailing numbers
       int key_len = strlen(key);
       int num_idx = key_len - 1;
       while (num_idx >= 0 && isdigit(key[num_idx]))
@@ -382,23 +453,21 @@ void process_jobs(Config *cfg) {
       log_msg(cfg, msg);
     }
 
-    // Execute Job Operations
     if (j->type == JOB_COPY || j->type == JOB_MOVE) {
       if (!cfg->dry_run && files_found > 0)
         mkdir_p(j->target);
       for (int f = 0; f < files_found; f++) {
         char target_path[MAX_STR];
-
-        // Get filename safely without modifying original path
         const char *base = strrchr(valid_files[f], '/');
         base = base ? base + 1 : valid_files[f];
 
         snprintf(target_path, sizeof(target_path), "%s/%s", j->target, base);
         if (!cfg->dry_run) {
-          if (j->type == JOB_COPY)
-            copy_file(valid_files[f], target_path);
-          else
-            move_file(valid_files[f], target_path);
+          if (j->type == JOB_COPY) {
+            copy_file_preserve(valid_files[f], target_path);
+          } else {
+            move_file_preserve(valid_files[f], target_path);
+          }
         }
       }
     } else if (j->type == JOB_REMOVE) {
@@ -449,7 +518,6 @@ void process_jobs(Config *cfg) {
     snprintf(msg, sizeof(msg), "Job '%s' done.", j->title);
     log_msg(cfg, msg);
 
-    // Clean up allocations
     if (valid_files) {
       for (int f = 0; f < files_found; f++)
         free(valid_files[f]);
