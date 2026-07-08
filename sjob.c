@@ -11,7 +11,6 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <time.h>
-#include <unistd.h>
 
 // Handle getopt portability across Linux, macOS, and AIX
 #if defined(__unix__) || defined(__AIX__) || defined(_AIX) || defined(__APPLE__)
@@ -140,10 +139,9 @@ void mkdir_p(const char *path) {
 
 // Portable metadata cloning function
 int clone_metadata(const char *src, const char *dst, struct stat *st) {
-  // 1. Preserve Owner and Group (May require root/sudo for chown to other
-  // users)
+  // 1. Preserve Owner and Group
   if (chown(dst, st->st_uid, st->st_gid) != 0) {
-    // Soft-fail: Log or ignore if running as non-root user
+    // Soft-fail: Ignore if running as non-root user
   }
 
   // 2. Preserve Permissions (chmod)
@@ -179,17 +177,14 @@ int copy_file_preserve(const char *src, const char *dst) {
     return -1;
 
 #if defined(__APPLE__)
-  // macOS native high-performance copy metadata + data api
   if (copyfile(src, dst, NULL, COPYFILE_ALL) != 0)
     return -1;
   return 0;
 #else
-  // Linux / AIX / Generic POSIX implementation
   int in_fd = open(src, O_RDONLY);
   if (in_fd < 0)
     return -1;
 
-  // Create destination with temporary default permissions
   int out_fd = open(dst, O_WRONLY | O_CREAT | O_TRUNC, 0666);
   if (out_fd < 0) {
     close(in_fd);
@@ -197,7 +192,6 @@ int copy_file_preserve(const char *src, const char *dst) {
   }
 
 #if defined(__linux__)
-  // Linux zero-copy system optimization
   off_t bytes_copied = 0;
   while (bytes_copied < st.st_size) {
     ssize_t res =
@@ -209,7 +203,6 @@ int copy_file_preserve(const char *src, const char *dst) {
     }
   }
 #else
-  // Standard fallback read/write loop (AIX and others)
   char buf[16384];
   ssize_t n_read;
   while ((n_read = read(in_fd, buf, sizeof(buf))) > 0) {
@@ -228,14 +221,11 @@ int copy_file_preserve(const char *src, const char *dst) {
 
   close(in_fd);
   close(out_fd);
-
-  // Synchronize all metadata mappings manually
   return clone_metadata(src, dst, &st);
 #endif
 }
 
 int move_file_preserve(const char *src, const char *dst) {
-  // If files are on the same filesystem, rename() keeps attributes inherently.
   if (rename(src, dst) == 0)
     return 0;
 
@@ -491,8 +481,12 @@ void process_jobs(Config *cfg) {
                     sizeof(cmd_to_run));
 
         if (cfg->debug) {
-          snprintf(msg, sizeof(msg), "Executing: %s", cmd_to_run);
-          log_msg(cfg, msg);
+          char *cmd_msg = malloc(MAX_CMD + 50);
+          if (cmd_msg) {
+            snprintf(cmd_msg, MAX_CMD + 50, "Executing: %s", cmd_to_run);
+            log_msg(cfg, cmd_msg);
+            free(cmd_msg);
+          }
         }
         if (!cfg->dry_run)
           system(cmd_to_run);
@@ -506,8 +500,12 @@ void process_jobs(Config *cfg) {
                       sizeof(cmd_to_run));
 
           if (cfg->debug) {
-            snprintf(msg, sizeof(msg), "Executing: %s", cmd_to_run);
-            log_msg(cfg, msg);
+            char *cmd_msg = malloc(MAX_CMD + 50);
+            if (cmd_msg) {
+              snprintf(cmd_msg, MAX_CMD + 50, "Executing: %s", cmd_to_run);
+              log_msg(cfg, cmd_msg);
+              free(cmd_msg);
+            }
           }
           if (!cfg->dry_run)
             system(cmd_to_run);
@@ -573,7 +571,7 @@ int main(int argc, char *argv[]) {
         snprintf(msg, sizeof(msg),
                  "All jobs finished. Time spent: %lds. Waiting for %ds before "
                  "next loop...",
-                 elapsed, wait_time);
+                 (long)elapsed, wait_time);
         log_msg(&cfg, msg);
       }
       sleep(wait_time);
