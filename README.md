@@ -1,6 +1,7 @@
 # SJob Program
 
-El programa `sjob` es un script en Python para:
+El programa `sjob` es un programa en **C** para:
+
 - Copiar periódicamente archivos de una ruta a otra
 - Mover periódicamente archivos de una ruta a otra
 - Remover periódicamente archivos de una ruta
@@ -11,23 +12,23 @@ El programa `sjob` es un script en Python para:
 Para su ejecución el programa debe ejecutarse `sjob /archivo/de/configuración` y el mismo trabajará según el archivo de configuración, mostrando más o menos mensajes (con marcas de tiempo) dependiendo de si la configuración es en modo depuración o no. Como el programa está pensado para ser usado como un servicio, y en la mayoría de los Linux modernos se ejecutan los servicios bajo SystemD y SystemD reporta incluyendo marcas de tiempo, bajo ese sistema se usa `sjob -s /archivo/de/configuración`, lo que hace que el programa no incluya mensajes con marcas de tiempo (pero SystemD sí).
 
 El programa `sjob`:
+
 - Lee el archivo de configuración dado como primer parámetro
 - En el archivo de configuración puede haber opciones individuales no numeradas `DEBUG`, `DRY_RUN`, `DELAY` y `TIMEFMT` que se explicarán.
 - En el archivo de configuración pueden haber opciones numeradas `COPY_JOBx` (con x un entero), `MOVE_JOBx`, `REMOVE_JOBx` y `CMD_JOBx`.
-	- Las opciones `COPY_JOBx` deben tener sus parámetros conexos con el mismo identificador numérico. Se usan para que el programa vaya a una ruta, busque unos archivos y los copie a otra ruta
-	- Las opciones `MOVE_JOBx` deben tener también sus parámetros conexos con el mismo identificador numérico. Se usan, como el nombre lo indica para que el programa vaya a una ruta, busque unos archivos y los mueva a otra ruta.
-	- Las opciones `REMOVE_JOBx` de igual manera tienen parámetros conexos. Se usan para que el programa vaya a una ruta, busque archivos y los remueva (los borre del sistema de archivos).
-	- Las opciones `CMD_JOBx` también tienen parámetros conexos. Se usa para que el programa vaya a una ruta, busque archivos y ejecute un comando dando como parámetro los archivos encontrados.
+  - Las opciones `COPY_JOBx` deben tener sus parámetros conexos con el mismo identificador numérico. Se usan para que el programa vaya a una ruta, busque unos archivos y los copie a otra ruta
+  - Las opciones `MOVE_JOBx` deben tener también sus parámetros conexos con el mismo identificador numérico. Se usan, como el nombre lo indica para que el programa vaya a una ruta, busque unos archivos y los mueva a otra ruta.
+  - Las opciones `REMOVE_JOBx` de igual manera tienen parámetros conexos. Se usan para que el programa vaya a una ruta, busque archivos y los remueva (los borre del sistema de archivos).
+  - Las opciones `CMD_JOBx` también tienen parámetros conexos. Se usa para que el programa vaya a una ruta, busque archivos y ejecute un comando dando como parámetro los archivos encontrados.
 
 # Opciones base
-
 
 ## DEBUG
 
 La opción DEBUG se usa para que el programa emita numerosos mensajes, reportando cuando comienza cada job y cuando termina, y cuántos archivos está procesando en cada job.
 La opción tiene la sintaxis `DEBUG=booleano` donde booleano puede ser `True`, `Yes`, `1`, (sin importar mayúsculas) o `False`, `No`, o `0` (sin importar mayúsculas).
 
-Este parámetro es **opcional**. 
+Este parámetro es **opcional**.
 
 ## DRY_RUN
 
@@ -43,51 +44,60 @@ Este parámetro es **opcional**.
 
 ## DELAY
 
-Cuánto tiempo debe esperar el programa entre ejecución y ejecución. Recibe un **número entero** (que interpreta como número de segundos), o un número seguido de `m` (indica minutos), `h` (horas) o `d` (días). El programa procesa todos las tareas configuradas y espera el tiempo indicado para volver a iniciar desde la tarea con menor número. Nótese que el programa tiene en cuenta cuánto se toman las tareas, así que si `DELAY=300` y las taras toman `5` segundos esperará `295` (y no 300) segundos para comenzar el ciclo de nuevo.
+Cuánto tiempo debe esperar el programa entre ejecución y ejecución. Recibe un **número entero** (que interpreta como número de segundos), o un número seguido de `m` (indica minutos), `h` (horas) o `d` (días). El programa procesa todos las tareas configuradas y espera el tiempo indicado para volver a iniciar desde la tarea con menor número. Nótese que el programa tiene en cuenta cuánto se toman las tareas, así que si `DELAY=300` y las taras toman `5` segundos esperará `295` (y no 300) segundos para comenzar el ciclo de nuevo. Las unidades `d`, `h`, `m` no son sensibles a las mayúsculas.
 
 Este parámetro es **obligatorio**.
 
 # Opciones de tarea numeradas
 
-
 ## Tareas de copia
 
 Las tareas de copia se definen usando los parámetros `COPY_JOBx` (título), y los parámetros de dónde, hacia dónde, qué nombres de archivos y filtros de "más nuevo" y "más viejo":
+
 - `COPY_JOBx` Simplemente un título para la tarea. Son visibles en la consola (cuando no está ejecutándose con SystemD) o en el log del sistema (cuando se está ejecutando con SystemD).
 - `COPY_SOURCEx` Ruta (entre comillas dobles) de dónde se deben tomar los archivos a copiar. Si se usa SystemD debe ser una ruta absoluta (comenzando con `/`).
 - `COPY_TARGETx` Ruta (entre comillas dobles) a dónde se deben copiar los archivos. Igual que con la fuente, si se usa SystemD debe ser una ruta absoluta.
 - `COPY_EXPRx` Filtro de nombres de archivos a copiar. Si no se da busca "todos los no ocultos" o `*`. Este parámetro es **opcional**.
 - `COPY_NEWERx` Filtro de edad de los archivos a copiar. Si no se da busca todos. Si se da debe ser un número de segundos (un entero sin sufijo), o un número de minutos (con el sufijo `m`), o número de horas (con `h`), o número de días (con `d`). Con este parámetro copia los archivos que cumplen `COPY_EXPRx` y (**AND**) sean más nuevos que el tiempo indicado. Este parámetro es **opcional**.
 - `COPY_OLDERx` Filtro de edad de los archivos a copiar. Si no se da busca todos. Si se da debe ser un número de segundos (un entero sin sufijo), o un número de minutos (con el sufijo `m`), o número de horas (con `h`), o número de días (con `d`). Con este parámetro copia los archivos que cumplen `COPY_EXPRx` y (**AND**) sean más viejos que el tiempo indicado. Este parámetro es **opcional**.
+- `COPY_PREx` Comando a ejecutar antes de comenzar la copia de los archivos. Este parámetro es **opcional**.
+- `COPY_POSTx` Comando a ejecutar después de hacer la copia de los archivos. Este parámetro es **opcional**.
 
-**Notas:** Las tareas de copia sobreescriben los archivos destino que encuentre con el mismo nombre. Los filtros de edad comparan exclusivo, es decir "más nuevo que" y no "más nuevo o igual que" y así.
+**Notas:** Las tareas de copia sobreescriben los archivos destino que encuentre con el mismo nombre. Los filtros de edad comparan exclusivo, es decir "más nuevo que" y no "más nuevo o igual que" y así. Las tareas intentan mantener el dueño, el grupo y los permisos de los archivos copiados. Se sugiere que los comandos `PREx` y `POSTx` se nombre con ruta completa (`/usr/bin/su` y no `su`).
 
 ## Tareas de movimiento
 
 Las tareas de movimiento se definen usando los parámetros `MOVE_JOBx` (título), y los parámetros de dónde, hacia dónde, qué nombres de archivos y filtros de "más nuevo" y "más viejo":
+
 - `MOVE_JOBx` Simplemente un título para la tarea. Son visibles en la consola (cuando no está ejecutándose con SystemD) o en el log del sistema (cuando se está ejecutando con SystemD).
 - `MOVE_SOURCEx` Ruta (entre comillas dobles) de dónde se deben tomar los archivos a mover. Si se usa SystemD debe ser una ruta absoluta (comenzando con `/`).
 - `MOVE_TARGETx` Ruta (entre comillas dobles) a dónde se deben mover los archivos. Igual que con la fuente, si se usa SystemD debe ser una ruta absoluta.
 - `MOVE_EXPRx` Filtro de nombres de archivos a mover. Si no se da busca "todos los no ocultos" o `*`. Este parámetro es **opcional**.
 - `MOVE_NEWERx` Filtro de edad de los archivos a mover. Si no se da busca todos. Si se da debe ser un número de segundos (un entero sin sufijo), o un número de minutos (con el sufijo m), o número de horas (con h), o número de días (con d). Con este parámetro mueve los archivos que cumplen MOVE_EXPRx y (AND) sean más nuevos que el tiempo indicado. Este parámetro es **opcional**.
 - `MOVE_OLDERx` Filtro de edad de los archivos a mover. Si no se da busca todos. Si se da debe ser un número de segundos (un entero sin sufijo), o un número de minutos (con el sufijo `m`), o número de horas (con `h`), o número de días (con `d`). Con este parámetro mueve los archivos que cumplen `MOVE_EXPRx` y (**AND**) sean más viejos que el tiempo indicado. Este parámetro es **opcional**.
+- `MOVE_PREx` Comando a ejecutar antes de comenzar el movimiento de los archivos. Este parámetro es **opcional**.
+- `MOVE_POSTx` Comando a ejecutar después de hacer el movimiento de los archivos. Este parámetro es **opcional**.
 
-**Notas:** Las tareas de movimiento sobreescriben los archivos destino que encuentre con el mismo nombre. Los filtros de edad comparan exclusivo, es decir "más nuevo que" y no "más nuevo o igual que" y así.
+**Notas:** Las tareas de movimiento sobreescriben los archivos destino que encuentre con el mismo nombre. Los filtros de edad comparan exclusivo, es decir "más nuevo que" y no "más nuevo o igual que" y así. Las tareas intentan mantener el dueño, el grupo y los permisos de los archivos movidos. Se sugiere que los comandos `PREx` y `POSTx` se nombre con ruta completa (`/usr/bin/su` y no `su`).
 
 ## Tareas de remoción
 
 Las tareas de remoción se definen usando los parámetros `REMOVE_JOBx` (título), y los parámetros de dónde, qué nombres de archivos y filtros de "más nuevo" y "más viejo":
+
 - `REMOVE_JOBx` Simplemente un título para la tarea. Son visibles en la consola (cuando no está ejecutándose con SystemD) o en el log del sistema (cuando se está ejecutando con SystemD).
 - `REMOVE_SOURCEx` Ruta (entre comillas dobles) de dónde se deben tomar los archivos a mover. Si se usa SystemD debe ser una ruta absoluta (comenzando con `/`).
 - `REMOVE_EXPRx` Filtro de nombres de archivos a remover. Si no se da busca "todos los no ocultos" o `*`. Este parámetro es **opcional**.
 - `REMOVE_NEWERx` Filtro de edad de los archivos a remover. Si no se da busca todos. Si se da debe ser un número de segundos (un entero sin sufijo), o un número de minutos (con el sufijo `m`), o número de horas (con `h`), o número de días (con `d`). Con este parámetro remueve los archivos que cumplen `REMOVE_EXPRx` y (**AND**) sean más nuevos que el tiempo indicado. Este parámetro es **opcional**.
-- `REMOVE_OLDERx` Filtro de edad de los archivos a mover. Si no se da busca todos. Si se da debe ser un número de segundos (un entero sin sufijo), o un número de minutos (con el sufijo `m`), o número de horas (con `h`), o número de días (con `d`). Con este parámetro remueve los archivos que cumplen `MOVE_EXPRx` y (**AND**) sean más viejos que el tiempo indicado. Este parámetro es **opcional**.
+- `REMOVE_OLDERx` Filtro de edad de los archivos a mover. Si no se da busca todos. Si se da debe ser un número de segundos (un entero sin sufijo), o un número de minutos (con el sufijo `m`), o número de horas (con `h`), o número de días (con `d`). Con este parámetro remueve los archivos que cumplen `REMOVE_EXPRx` y (**AND**) sean más viejos que el tiempo indicado. Este parámetro es **opcional**.
+- `REMOVE_PREx` Comando a ejecutar antes de comenzar la remoción de los archivos. Este parámetro es **opcional**.
+- `REMOVE_POSTx` Comando a ejecutar después de hacer la remoción de los archivos. Este parámetro es **opcional**.
 
-**Notas:** Las tareas de remoción no pasan por un espacio de reciclaje, entonces no hay cómo recuperar los archivos removidos. Los filtros de edad comparan exclusivo, es decir "más nuevo que" y no "más nuevo o igual que" y así.
+**Notas:** Las tareas de remoción no pasan por un espacio de reciclaje, entonces no hay cómo recuperar los archivos removidos. Los filtros de edad comparan exclusivo, es decir "más nuevo que" y no "más nuevo o igual que" y así. Se sugiere que los comandos `PREx` y `POSTx` se nombre con ruta completa (`/usr/bin/su` y no `su`).
 
 ## Tareas de ejecución
 
 Las tareas de ejecución se definen usando los parámetros `CMD_JOBx` (título), y los parámetros de dónde, qué nombres de archivos y filtros de "más nuevo" y "más viejo":
+
 - `CMD_JOBx` Simplemente un título para la tarea. Son visibles en la consola (cuando no está ejecutándose con SystemD) o en el log del sistema (cuando se está ejecutando con SystemD).
 - `CMD_SOURCEx` Ruta (entre comillas dobles) de dónde se deben tomar los archivos a mover. Si se usa SystemD debe ser una ruta absoluta (comenzando con `/`).
 - `CMD_COMMANDx` Comando a ejecutar sobre los archivos encontrados. El comando típicamente incluye {} para indicar dónde deberán darse nombres de comandos como parámetros. Si por ejemplo se quisiera copiar por SSH al servidor respaldo y ruta `/backup` se usaría `CMD_COMMAND5="scp {} respaldo:/backup"` (suponiendo que sea la tarea `5`). Debe ser claro que este parámetro es **obligatorio**.
@@ -97,10 +107,9 @@ Las tareas de ejecución se definen usando los parámetros `CMD_JOBx` (título),
 - `CMD_REPLACEx` Cadena de texto a reemplazar en `CMD_COMMANDx` por los nombres de los archivos encontrados y filtrados. Si no se usa el programa asume `{}`. Este parámetro es **opcional**.
 - `CMD_MULTIPLEx` Este parámetro es booleano. Se usa para indicar que el comando se ejecutará con todos los nombres en una sola ejecución y separados por espacios (cuando es verdadero) o que el comando se ejecutará una vez por cada uno de los nombres de los archivos encontrados (cuando es falso). Como los otros parámetros booleanos, se puede usar `True`, `Yes`, `1` (sin comillas y sin importar mayúsculas), o también `False`, `No`, o `0` (también sin comillas y sin importar mayúsculas donde aplique). Según el ejemplo anterior, si tanto archivo1 como archivo2 cumplen los filtros y se tiene `CMD_MULTIPLE5=True` entonces se ejecutaría `scp archivo1 archivo2 respaldo:/backup` (una ejecución con todos los archivos); pero si se define `CMD_MULTIPLE5=False` entonces ejecutaría primero `scp archivo1 respaldo:/backup` y luego `scp archivo2 respaldo:/backup` (una ejecución por cada archivo).
 
-**Notas:** Los comandos es mejor especificarlos con ruta completa (como `/usr/bin/scp`) y no solo el nombre (como `scp`). Los filtros de edad comparan exclusivo, es decir "más nuevo que" y no "más nuevo o igual que" y así. 
+**Notas:** Los comandos es mejor especificarlos con ruta completa (como `/usr/bin/scp`) y no solo el nombre (como `scp`). Los filtros de edad comparan exclusivo, es decir "más nuevo que" y no "más nuevo o igual que" y así.
 
 # Ejemplos de archivo de configuración
-
 
 ## Ejemplo de archivo de configuración #1
 
@@ -138,7 +147,11 @@ REMOVE_SOURCE2="/db2/logs"
 # Remueve los archivos terminados en tres dígitos
 REMOVE_EXPR2="*.[0-9][0-9][0-9]"
 # Remueve los mayores a un día de modificados
-REMOVE_OLDER=1d
+REMOVE_OLDER2=1d
+# Baja la instancia antes de remover los archivos
+REMOVE_PRE2=/usr/bin/su - db2inst -c "db2stop -force"
+# Sube la instancia luego de la remoción
+REMOVE_POST2=/usr/bin/su - db2inst -c "db2start"
 ```
 
 El anterior archivo se usaría de manera semejante al ejemplo de más arriba.
@@ -146,6 +159,7 @@ El anterior archivo se usaría de manera semejante al ejemplo de más arriba.
 # Ejecución como servicio
 
 Si se ejecuta como servicio y el sistema usa SystemD (como RHEL) entonces se necesitan tres cosas:
+
 - El programa en una ruta definida. Se recomienda usar `/usr/local/bin/sjob`.
 - Un archivo de configuración. Se recomienda usar `/etc/sjob.conf`.
 - Un archivo de definición de servicio. Se recomienda usar `/etc/systemd/system/filemover.service` (o de pronto `sjob.service`). Recuérdese que al agregar o cambiar el archivo de definición de servicio deberá ejecutarse `systemctl daemon-reload`.
@@ -179,7 +193,7 @@ Environment=PYTHONUNBUFFERED=1
 WantedBy=multi-user.target
 ```
 
-**Nótese** que se incluye la opción `-s` para que el programa no emita mensajes con marca de tiempo (ya que SystemD incluye éstas). Nótese que `ExecStart`  deberá apuntar a la ruta real donde se puso el programa `sjob` y también con el nombre completo (con ruta) a dónde está la configuración.
+**Nótese** que se incluye la opción `-s` para que el programa no emita mensajes con marca de tiempo (ya que SystemD incluye éstas). Nótese que `ExecStart` deberá apuntar a la ruta real donde se puso el programa `sjob` y también con el nombre completo (con ruta) a dónde está la configuración.
 Luego de almacenado el archivo se usan `systemctl daemon-reload` y `systemctl start filemover`.
 
 ## Ejemplo de revisión de estado
