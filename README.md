@@ -186,8 +186,6 @@ RestartSec=10
 # Standard output and error logging goes to the systemd journal
 StandardOutput=journal
 StandardError=journal
-# Don't buffer the output (as Python does when in systemd)
-Environment=PYTHONUNBUFFERED=1
 
 [Install]
 WantedBy=multi-user.target
