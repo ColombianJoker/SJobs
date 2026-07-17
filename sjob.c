@@ -42,6 +42,10 @@ typedef struct {
   int older;
   int newer;
 
+  // Hooks for PRE and POST commands
+  char pre_cmd[MAX_STR];
+  char post_cmd[MAX_STR];
+
   // CMD specific
   char command[MAX_STR];
   char replace[MAX_STR];
@@ -137,19 +141,35 @@ void mkdir_p(const char *path) {
   mkdir(tmp, 0755);
 }
 
+// Executes a job hook command safely if defined
+void run_hook(Config *cfg, const char *hook_name, const char *cmd) {
+  if (!cmd || !*cmd)
+    return;
+
+  if (cfg->debug) {
+    char *hook_log = malloc(MAX_STR + 50);
+    if (hook_log) {
+      snprintf(hook_log, MAX_STR + 50, "Executing %s Hook: %s", hook_name, cmd);
+      log_msg(cfg, hook_log);
+      free(hook_log);
+    }
+  }
+
+  if (!cfg->dry_run) {
+    system(cmd);
+  }
+}
+
 // Portable metadata cloning function
 int clone_metadata(const char *src, const char *dst, struct stat *st) {
-  // 1. Preserve Owner and Group
   if (chown(dst, st->st_uid, st->st_gid) != 0) {
     // Soft-fail: Ignore if running as non-root user
   }
 
-  // 2. Preserve Permissions (chmod)
   if (chmod(dst, st->st_mode & 07777) != 0) {
     return -1;
   }
 
-  // 3. Preserve Access and Modification Timestamps (utimes)
   struct timeval tv[2];
 #if defined(__APPLE__)
   tv[0].tv_sec = st->st_atimespec.tv_sec;
@@ -229,7 +249,6 @@ int move_file_preserve(const char *src, const char *dst) {
   if (rename(src, dst) == 0)
     return 0;
 
-  // Cross-device boundary shift fallback (EXDEV)
   if (errno == EXDEV) {
     if (copy_file_preserve(src, dst) == 0) {
       unlink(src);
@@ -350,6 +369,10 @@ void parse_config(const char *filepath, Config *cfg) {
           j->older = parse_time_str(val, 0);
         else if (strcmp(prefix, "COPY_NEWER") == 0)
           j->newer = parse_time_str(val, 0);
+        else if (strcmp(prefix, "COPY_PRE") == 0)
+          strcpy(j->pre_cmd, val);
+        else if (strcmp(prefix, "COPY_POST") == 0)
+          strcpy(j->post_cmd, val);
 
         else if (strcmp(prefix, "MOVE_JOB") == 0) {
           j->type = JOB_MOVE;
@@ -364,6 +387,10 @@ void parse_config(const char *filepath, Config *cfg) {
           j->older = parse_time_str(val, 0);
         else if (strcmp(prefix, "MOVE_NEWER") == 0)
           j->newer = parse_time_str(val, 0);
+        else if (strcmp(prefix, "MOVE_PRE") == 0)
+          strcpy(j->pre_cmd, val);
+        else if (strcmp(prefix, "MOVE_POST") == 0)
+          strcpy(j->post_cmd, val);
 
         else if (strcmp(prefix, "REMOVE_JOB") == 0) {
           j->type = JOB_REMOVE;
@@ -376,6 +403,10 @@ void parse_config(const char *filepath, Config *cfg) {
           j->older = parse_time_str(val, 0);
         else if (strcmp(prefix, "REMOVE_NEWER") == 0)
           j->newer = parse_time_str(val, 0);
+        else if (strcmp(prefix, "REMOVE_PRE") == 0)
+          strcpy(j->pre_cmd, val);
+        else if (strcmp(prefix, "REMOVE_POST") == 0)
+          strcpy(j->post_cmd, val);
 
         else if (strcmp(prefix, "CMD_JOB") == 0) {
           j->type = JOB_CMD;
@@ -442,6 +473,9 @@ void process_jobs(Config *cfg) {
       snprintf(msg, sizeof(msg), "Starting job: %s", j->title);
       log_msg(cfg, msg);
     }
+
+    // Execute PRE-execution hook command if specified
+    run_hook(cfg, "PRE", j->pre_cmd);
 
     if (j->type == JOB_COPY || j->type == JOB_MOVE) {
       if (!cfg->dry_run && files_found > 0)
@@ -513,6 +547,9 @@ void process_jobs(Config *cfg) {
       }
     }
 
+    // Execute POST-execution hook command if specified
+    run_hook(cfg, "POST", j->post_cmd);
+
     snprintf(msg, sizeof(msg), "Job '%s' done.", j->title);
     log_msg(cfg, msg);
 
@@ -538,6 +575,7 @@ int main(int argc, char *argv[]) {
 
   if (optind >= argc) {
     fprintf(stderr, "Usage: %s [-s] <config_file>\n", argv[0]);
+    fprintf(stderr, "Version 20260717.114112 (Ramón Barrios Láscar)\n");
     return 1;
   }
 
