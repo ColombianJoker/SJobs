@@ -600,7 +600,8 @@ int main(int argc, char *argv[]) {
 
   if (optind >= argc) {
     fprintf(stderr, "Usage: %s [-s] <config_file>\n", argv[0]);
-    fprintf(stderr, "Version 20260717.114112 (Ramón Barrios Láscar)\n");
+    fprintf(stderr, "Version compiled on %s at %s (Ramón Barrios Láscar)\n",
+            __DATE__, __TIME__);
     return 1;
   }
 
