@@ -10,6 +10,7 @@
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <time.h>
 
 // Handle getopt portability across Linux, macOS, and AIX
@@ -141,10 +142,11 @@ void mkdir_p(const char *path) {
   mkdir(tmp, 0755);
 }
 
-// Executes a job hook command safely if defined
-void run_hook(Config *cfg, const char *hook_name, const char *cmd) {
+// Executes a job hook command safely if defined.
+// Returns true if the command succeeded (exit code 0) or if no command was set.
+bool run_hook(Config *cfg, const char *hook_name, const char *cmd) {
   if (!cmd || !*cmd)
-    return;
+    return true;
 
   if (cfg->debug) {
     char *hook_log = malloc(MAX_STR + 50);
@@ -155,9 +157,18 @@ void run_hook(Config *cfg, const char *hook_name, const char *cmd) {
     }
   }
 
-  if (!cfg->dry_run) {
-    system(cmd);
+  if (cfg->dry_run) {
+    return true;
   }
+
+  int status = system(cmd);
+
+  // Check if process exited normally with code 0
+  if (status != -1 && WIFEXITED(status) && WEXITSTATUS(status) == 0) {
+    return true;
+  }
+
+  return false;
 }
 
 // Portable metadata cloning function
@@ -474,8 +485,22 @@ void process_jobs(Config *cfg) {
       log_msg(cfg, msg);
     }
 
-    // Execute PRE-execution hook command if specified
-    run_hook(cfg, "PRE", j->pre_cmd);
+    // Execute PRE-execution hook command if specified.
+    // Must return true (exit code 0) for job execution to continue.
+    if (!run_hook(cfg, "PRE", j->pre_cmd)) {
+      snprintf(msg, sizeof(msg),
+               "WARNING: PRE hook failed for job '%s'. Skipping job.",
+               j->title);
+      log_msg(cfg, msg);
+
+      if (valid_files) {
+        for (int f = 0; f < files_found; f++)
+          free(valid_files[f]);
+        free(valid_files);
+      }
+      globfree(&glob_res);
+      continue;
+    }
 
     if (j->type == JOB_COPY || j->type == JOB_MOVE) {
       if (!cfg->dry_run && files_found > 0)
