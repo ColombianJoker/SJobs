@@ -44,7 +44,11 @@ Este parámetro es **opcional**.
 
 ## LOOP
 
-Cuánto tiempo debe esperar el programa entre ejecución y ejecución. Recibe un **número entero** (que interpreta como número de segundos), o un número seguido de `m` (indica minutos), `h` (horas) o `d` (días). El programa procesa todos las tareas configuradas y espera el tiempo indicado para volver a iniciar desde la tarea con menor número. Nótese que el programa tiene en cuenta cuánto se toman las tareas, así que si `LOOP=300` y las taras toman `5` segundos esperará `295` (y no 300) segundos para comenzar el ciclo de nuevo. Las unidades `d`, `h`, `m` no son sensibles a las mayúsculas.
+Cuánto tiempo debe esperar el programa entre ejecución y ejecución. Recibe un **número entero** (que interpreta como número de segundos), o un número seguido de `m` (indica minutos), `h` (horas) o `d` (días). El programa procesa todos las tareas configuradas y espera el tiempo indicado para volver a iniciar desde la tarea con menor número. Nótese que el programa tiene en cuenta cuánto se toman las tareas, así que si `LOOP=300` y las taras toman `5` segundos esperará `295` (y no `300`) segundos para comenzar el ciclo de nuevo. Las unidades `d`, `h`, `m` no son sensibles a las mayúsculas.
+
+**NOTA**: Esta sentencia era la anterior **DELAY**, pero se cambió para que sea más acorde con el funcionamiento real del programa.
+
+Este parámetro es **opcional**. Si no se da se asume como `0` y el programa ejecuta las tareas una única vez y termina (de manera exitosa).
 
 ## START_HOUR
 A qué horas del día deben comenzar a procesarse los jobs. Reconoce los siguientes formatos:
@@ -54,7 +58,7 @@ A qué horas del día deben comenzar a procesarse los jobs. Reconoce los siguien
 
 Si la hora indicada es anterior al momento actual (si son las 3:00PM o 15:00 y `START_HOUR=3:00`) entonces el programa esperará a que sea dicha hora el siguiente día para comenzar.
 
-Este parámetro es **obligatorio**.
+Este parámetro es **opcional**.
 
 # Opciones de tarea numeradas
 

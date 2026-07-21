@@ -59,7 +59,7 @@ typedef struct {
   int loop; // Renamed from delay to match LOOP configuration
   char timefmt[MAX_STR];
   bool strip_ts;
-  int start_time_sec; // Added for START_HOUR tracking
+  int start_time_sec; // Added for START_HOUR / START_TIME tracking
 
   Job jobs[MAX_JOBS];
   int max_job_id;
@@ -114,8 +114,8 @@ int parse_time_str(const char *val, int def) {
   return atoi(val) * multiplier;
 }
 
-// Parses START_HOUR formats like "3", "2:45", or "1759" into seconds from
-// midnight
+// Parses START_HOUR/START_TIME formats like "3", "2:45", or "1759" into seconds
+// from midnight
 int parse_start_hour(const char *val) {
   if (!val || !*val)
     return -1;
@@ -385,7 +385,7 @@ void parse_config(const char *filepath, Config *cfg) {
       cfg->loop = parse_time_str(val, 60);
     else if (strcmp(key, "TIMEFMT") == 0)
       strcpy(cfg->timefmt, val);
-    else if (strcmp(key, "START_HOUR") == 0)
+    else if (strcmp(key, "START_HOUR") == 0 || strcmp(key, "START_TIME") == 0)
       cfg->start_time_sec = parse_start_hour(val);
     else {
       char prefix[MAX_STR] = {0};
@@ -647,14 +647,14 @@ int main(int argc, char *argv[]) {
   parse_config(argv[optind], &cfg);
 
   if (cfg.debug) {
-    log_msg(&cfg, "=== INITIALIZING JOB RUNNER (C VERSION) ===");
+    log_msg(&cfg, "========= INITIALIZING JOB RUNNER =========");
     char msg[MAX_STR];
     snprintf(msg, sizeof(msg), "LOOP: %d seconds", cfg.loop);
     log_msg(&cfg, msg);
     log_msg(&cfg, "===========================================");
   }
 
-  // Handle optional initial START_HOUR delay
+  // Handle optional initial START_HOUR / START_TIME delay
   if (cfg.start_time_sec >= 0) {
     time_t now = time(NULL);
     struct tm *t = localtime(&now);
@@ -673,12 +673,12 @@ int main(int argc, char *argv[]) {
       int h = cfg.start_time_sec / 3600;
       int m = (cfg.start_time_sec % 3600) / 60;
       snprintf(msg, sizeof(msg),
-               "START_HOUR set to %02d:%02d. Sleeping for %d seconds before "
-               "starting jobs.",
+               "START_HOUR/TIME set to %02d:%02d. Sleeping for %d seconds "
+               "before starting jobs.",
                h, m, wait_sec);
     } else {
-      snprintf(msg, sizeof(msg), "Sleeping for %d seconds until START_HOUR...",
-               wait_sec);
+      snprintf(msg, sizeof(msg),
+               "Sleeping for %d seconds until START_HOUR/TIME...", wait_sec);
     }
     log_msg(&cfg, msg);
 
