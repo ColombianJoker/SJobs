@@ -56,9 +56,10 @@ typedef struct {
 typedef struct {
   bool debug;
   bool dry_run;
-  int delay;
+  int loop; // Renamed from delay to match LOOP configuration
   char timefmt[MAX_STR];
   bool strip_ts;
+  int start_time_sec; // Added for START_HOUR tracking
 
   Job jobs[MAX_JOBS];
   int max_job_id;
@@ -111,6 +112,41 @@ int parse_time_str(const char *val, int def) {
       multiplier = 1;
   }
   return atoi(val) * multiplier;
+}
+
+// Parses START_HOUR formats like "3", "2:45", or "1759" into seconds from
+// midnight
+int parse_start_hour(const char *val) {
+  if (!val || !*val)
+    return -1;
+
+  int hours = 0, mins = 0;
+
+  if (strchr(val, ':')) {
+    sscanf(val, "%d:%d", &hours, &mins);
+  } else {
+    int len = strlen(val);
+    if (len <= 2) {
+      hours = atoi(val);
+      mins = 0;
+    } else if (len == 3) {
+      char h[2] = {val[0], 0};
+      hours = atoi(h);
+      mins = atoi(val + 1);
+    } else if (len == 4) {
+      char h[3] = {val[0], val[1], 0};
+      hours = atoi(h);
+      mins = atoi(val + 2);
+    } else {
+      return -1; // Invalid length
+    }
+  }
+
+  // Validate standard 24-hour clock constraints
+  if (hours < 0 || hours > 23 || mins < 0 || mins > 59)
+    return -1;
+
+  return (hours * 3600) + (mins * 60);
 }
 
 void log_msg(Config *cfg, const char *msg) {
@@ -313,6 +349,7 @@ void str_replace(const char *orig, const char *rep, const char *with, char *dst,
 void parse_config(const char *filepath, Config *cfg) {
   memset(cfg, 0, sizeof(Config));
   strcpy(cfg->timefmt, "%Y-%m-%d %H:%M:%S");
+  cfg->start_time_sec = -1; // Default to unused
 
   for (int i = 0; i < MAX_JOBS; i++) {
     cfg->jobs[i].id = -1;
@@ -344,10 +381,12 @@ void parse_config(const char *filepath, Config *cfg) {
       cfg->debug = parse_bool(val, false);
     else if (strcmp(key, "DRY_RUN") == 0)
       cfg->dry_run = parse_bool(val, false);
-    else if (strcmp(key, "DELAY") == 0)
-      cfg->delay = parse_time_str(val, 60);
+    else if (strcmp(key, "LOOP") == 0)
+      cfg->loop = parse_time_str(val, 60);
     else if (strcmp(key, "TIMEFMT") == 0)
       strcpy(cfg->timefmt, val);
+    else if (strcmp(key, "START_HOUR") == 0)
+      cfg->start_time_sec = parse_start_hour(val);
     else {
       char prefix[MAX_STR] = {0};
       int id = -1;
@@ -610,9 +649,40 @@ int main(int argc, char *argv[]) {
   if (cfg.debug) {
     log_msg(&cfg, "=== INITIALIZING JOB RUNNER (C VERSION) ===");
     char msg[MAX_STR];
-    snprintf(msg, sizeof(msg), "DELAY: %d seconds", cfg.delay);
+    snprintf(msg, sizeof(msg), "LOOP: %d seconds", cfg.loop);
     log_msg(&cfg, msg);
     log_msg(&cfg, "===========================================");
+  }
+
+  // Handle optional initial START_HOUR delay
+  if (cfg.start_time_sec >= 0) {
+    time_t now = time(NULL);
+    struct tm *t = localtime(&now);
+
+    // Calculate current seconds since midnight
+    int current_sec = (t->tm_hour * 3600) + (t->tm_min * 60) + t->tm_sec;
+    int wait_sec = cfg.start_time_sec - current_sec;
+
+    // If the target time has already passed today, target tomorrow
+    if (wait_sec <= 0) {
+      wait_sec += 86400; // 24 hours
+    }
+
+    char msg[MAX_STR];
+    if (cfg.debug) {
+      int h = cfg.start_time_sec / 3600;
+      int m = (cfg.start_time_sec % 3600) / 60;
+      snprintf(msg, sizeof(msg),
+               "START_HOUR set to %02d:%02d. Sleeping for %d seconds before "
+               "starting jobs.",
+               h, m, wait_sec);
+    } else {
+      snprintf(msg, sizeof(msg), "Sleeping for %d seconds until START_HOUR...",
+               wait_sec);
+    }
+    log_msg(&cfg, msg);
+
+    sleep(wait_sec);
   }
 
   while (1) {
@@ -624,9 +694,9 @@ int main(int argc, char *argv[]) {
     time_t start_time = time(NULL);
     process_jobs(&cfg);
 
-    if (cfg.delay > 0) {
+    if (cfg.loop > 0) {
       time_t elapsed = time(NULL) - start_time;
-      int wait_time = cfg.delay - elapsed;
+      int wait_time = cfg.loop - elapsed;
       if (wait_time < 0)
         wait_time = 0;
 
@@ -640,7 +710,7 @@ int main(int argc, char *argv[]) {
       }
       sleep(wait_time);
     } else {
-      log_msg(&cfg, "Delay is 0. Running once and exiting.");
+      log_msg(&cfg, "LOOP is 0. Running once and exiting.");
       break;
     }
   }

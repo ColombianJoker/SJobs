@@ -14,7 +14,7 @@ Para su ejecución el programa debe ejecutarse `sjob /archivo/de/configuración`
 El programa `sjob`:
 
 - Lee el archivo de configuración dado como primer parámetro
-- En el archivo de configuración puede haber opciones individuales no numeradas `DEBUG`, `DRY_RUN`, `DELAY` y `TIMEFMT` que se explicarán.
+- En el archivo de configuración puede haber opciones individuales no numeradas `DEBUG`, `DRY_RUN`, `LOOP`, `START_HOUR` y `TIMEFMT` que se explicarán.
 - En el archivo de configuración pueden haber opciones numeradas `COPY_JOBx` (con x un entero), `MOVE_JOBx`, `REMOVE_JOBx` y `CMD_JOBx`.
   - Las opciones `COPY_JOBx` deben tener sus parámetros conexos con el mismo identificador numérico. Se usan para que el programa vaya a una ruta, busque unos archivos y los copie a otra ruta
   - Las opciones `MOVE_JOBx` deben tener también sus parámetros conexos con el mismo identificador numérico. Se usan, como el nombre lo indica para que el programa vaya a una ruta, busque unos archivos y los mueva a otra ruta.
@@ -42,9 +42,17 @@ La opción `TIMEFMT` se usa para indicar o especificar cómo se muestran los avi
 
 Este parámetro es **opcional**.
 
-## DELAY
+## LOOP
 
-Cuánto tiempo debe esperar el programa entre ejecución y ejecución. Recibe un **número entero** (que interpreta como número de segundos), o un número seguido de `m` (indica minutos), `h` (horas) o `d` (días). El programa procesa todos las tareas configuradas y espera el tiempo indicado para volver a iniciar desde la tarea con menor número. Nótese que el programa tiene en cuenta cuánto se toman las tareas, así que si `DELAY=300` y las taras toman `5` segundos esperará `295` (y no 300) segundos para comenzar el ciclo de nuevo. Las unidades `d`, `h`, `m` no son sensibles a las mayúsculas.
+Cuánto tiempo debe esperar el programa entre ejecución y ejecución. Recibe un **número entero** (que interpreta como número de segundos), o un número seguido de `m` (indica minutos), `h` (horas) o `d` (días). El programa procesa todos las tareas configuradas y espera el tiempo indicado para volver a iniciar desde la tarea con menor número. Nótese que el programa tiene en cuenta cuánto se toman las tareas, así que si `LOOP=300` y las taras toman `5` segundos esperará `295` (y no 300) segundos para comenzar el ciclo de nuevo. Las unidades `d`, `h`, `m` no son sensibles a las mayúsculas.
+
+## START_HOUR
+A qué horas del día deben comenzar a procesarse los jobs. Reconoce los siguientes formatos:
+  + `H` o un número entero solitario. Se interpreta como `H:00`, es decir la hora en punto indicada, entre `0` y `23`.
+  + `H:MM` o `H:M` o `HH:MM`, de `0:00` a `23:59`. Se intepreta en horario militar local.
+  + `HMM` o `HHMM`, de `000` (`0:00`) a `2359` (`23:59`). Hora militar local.
+
+Si la hora indicada es anterior al momento actual (si son las 3:00PM o 15:00 y `START_HOUR=3:00`) entonces el programa esperará a que sea dicha hora el siguiente día para comenzar.
 
 Este parámetro es **obligatorio**.
 
