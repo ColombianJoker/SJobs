@@ -60,7 +60,7 @@ Las tareas de copia se definen usando los parámetros `COPY_JOBx` (título), y l
 - `COPY_EXPRx` Filtro de nombres de archivos a copiar. Si no se da busca "todos los no ocultos" o `*`. Este parámetro es **opcional**.
 - `COPY_NEWERx` Filtro de edad de los archivos a copiar. Si no se da busca todos. Si se da debe ser un número de segundos (un entero sin sufijo), o un número de minutos (con el sufijo `m`), o número de horas (con `h`), o número de días (con `d`). Con este parámetro copia los archivos que cumplen `COPY_EXPRx` y (**AND**) sean más nuevos que el tiempo indicado. Este parámetro es **opcional**.
 - `COPY_OLDERx` Filtro de edad de los archivos a copiar. Si no se da busca todos. Si se da debe ser un número de segundos (un entero sin sufijo), o un número de minutos (con el sufijo `m`), o número de horas (con `h`), o número de días (con `d`). Con este parámetro copia los archivos que cumplen `COPY_EXPRx` y (**AND**) sean más viejos que el tiempo indicado. Este parámetro es **opcional**.
-- `COPY_PREx` Comando a ejecutar antes de comenzar la copia de los archivos. Este parámetro es **opcional**.
+- `COPY_PREx` Comando a ejecutar antes de comenzar la copia de los archivos. Este parámetro es **opcional**. Si se da un `_PREx` el comando debe terminar con éxito (código de retorno `0`) para que se ejecute el resto del `COPY_JOBx`.
 - `COPY_POSTx` Comando a ejecutar después de hacer la copia de los archivos. Este parámetro es **opcional**.
 
 **Notas:** Las tareas de copia sobreescriben los archivos destino que encuentre con el mismo nombre. Los filtros de edad comparan exclusivo, es decir "más nuevo que" y no "más nuevo o igual que" y así. Las tareas intentan mantener el dueño, el grupo y los permisos de los archivos copiados. Se sugiere que los comandos `PREx` y `POSTx` se nombre con ruta completa (`/usr/bin/su` y no `su`).
@@ -75,7 +75,7 @@ Las tareas de movimiento se definen usando los parámetros `MOVE_JOBx` (título)
 - `MOVE_EXPRx` Filtro de nombres de archivos a mover. Si no se da busca "todos los no ocultos" o `*`. Este parámetro es **opcional**.
 - `MOVE_NEWERx` Filtro de edad de los archivos a mover. Si no se da busca todos. Si se da debe ser un número de segundos (un entero sin sufijo), o un número de minutos (con el sufijo m), o número de horas (con h), o número de días (con d). Con este parámetro mueve los archivos que cumplen MOVE_EXPRx y (AND) sean más nuevos que el tiempo indicado. Este parámetro es **opcional**.
 - `MOVE_OLDERx` Filtro de edad de los archivos a mover. Si no se da busca todos. Si se da debe ser un número de segundos (un entero sin sufijo), o un número de minutos (con el sufijo `m`), o número de horas (con `h`), o número de días (con `d`). Con este parámetro mueve los archivos que cumplen `MOVE_EXPRx` y (**AND**) sean más viejos que el tiempo indicado. Este parámetro es **opcional**.
-- `MOVE_PREx` Comando a ejecutar antes de comenzar el movimiento de los archivos. Este parámetro es **opcional**.
+- `MOVE_PREx` Comando a ejecutar antes de comenzar el movimiento de los archivos. Este parámetro es **opcional**. Si se da un `_PREx` el comando debe terminar con éxito (código de retorno `0`) para que se ejecute el resto del `MOVE_JOBx`.
 - `MOVE_POSTx` Comando a ejecutar después de hacer el movimiento de los archivos. Este parámetro es **opcional**.
 
 **Notas:** Las tareas de movimiento sobreescriben los archivos destino que encuentre con el mismo nombre. Los filtros de edad comparan exclusivo, es decir "más nuevo que" y no "más nuevo o igual que" y así. Las tareas intentan mantener el dueño, el grupo y los permisos de los archivos movidos. Se sugiere que los comandos `PREx` y `POSTx` se nombre con ruta completa (`/usr/bin/su` y no `su`).
@@ -89,7 +89,7 @@ Las tareas de remoción se definen usando los parámetros `REMOVE_JOBx` (título
 - `REMOVE_EXPRx` Filtro de nombres de archivos a remover. Si no se da busca "todos los no ocultos" o `*`. Este parámetro es **opcional**.
 - `REMOVE_NEWERx` Filtro de edad de los archivos a remover. Si no se da busca todos. Si se da debe ser un número de segundos (un entero sin sufijo), o un número de minutos (con el sufijo `m`), o número de horas (con `h`), o número de días (con `d`). Con este parámetro remueve los archivos que cumplen `REMOVE_EXPRx` y (**AND**) sean más nuevos que el tiempo indicado. Este parámetro es **opcional**.
 - `REMOVE_OLDERx` Filtro de edad de los archivos a mover. Si no se da busca todos. Si se da debe ser un número de segundos (un entero sin sufijo), o un número de minutos (con el sufijo `m`), o número de horas (con `h`), o número de días (con `d`). Con este parámetro remueve los archivos que cumplen `REMOVE_EXPRx` y (**AND**) sean más viejos que el tiempo indicado. Este parámetro es **opcional**.
-- `REMOVE_PREx` Comando a ejecutar antes de comenzar la remoción de los archivos. Este parámetro es **opcional**.
+- `REMOVE_PREx` Comando a ejecutar antes de comenzar la remoción de los archivos. Este parámetro es **opcional**. Si se da un `_PREx` el comando debe terminar con éxito (código de retorno `0`) para que se ejecute el resto del `MOVE_JOBx`.
 - `REMOVE_POSTx` Comando a ejecutar después de hacer la remoción de los archivos. Este parámetro es **opcional**.
 
 **Notas:** Las tareas de remoción no pasan por un espacio de reciclaje, entonces no hay cómo recuperar los archivos removidos. Los filtros de edad comparan exclusivo, es decir "más nuevo que" y no "más nuevo o igual que" y así. Se sugiere que los comandos `PREx` y `POSTx` se nombre con ruta completa (`/usr/bin/su` y no `su`).
@@ -154,7 +154,7 @@ REMOVE_PRE2=/usr/bin/su - db2inst -c "db2stop -force"
 REMOVE_POST2=/usr/bin/su - db2inst -c "db2start"
 ```
 
-El anterior archivo se usaría de manera semejante al ejemplo de más arriba.
+El anterior archivo se usaría de manera semejante al ejemplo de más arriba. Como hay un `REMOVE_PRE2`, el comando dado (el `/use/bin/su ... force"`) debe terminar con éxito (código de retorno `0`) para que se inicie la tarea de remoción de archivos.
 
 # Ejecución como servicio
 
