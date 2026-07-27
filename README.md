@@ -60,6 +60,11 @@ Si la hora indicada es anterior al momento actual (si son las 3:00PM o 15:00 y `
 
 Este parámetro es **opcional**.
 
+## LOG
+Si se incluye, a qué archivo de registro (_log_) deberán enviarse numerosos mensajes registrando la ejecución (los mensajes son adicionales y más detallados que los de la ejecución normal), incluyendo parámetros globales de ejecución y el procesado de cada uno de los archivos encontrados y o copiados o movidos o removidos (o fallidos en cada caso). Soporta enviar al archivo `/dev/stderr` que se puede manejar por ejemplo por redirección. Intenta crear los directorios necesarios para almacenar en el _log_. El especificar un archivo de registro inusable es un error.
+
+Este parámetro es **opcional**, y si no se incluye el programa muestra mensajes básicos por salida estándar.
+
 # Opciones de tarea numeradas
 
 ## Tareas de copia
@@ -145,6 +150,7 @@ Un archivo un poco más complejo sería
 DELAY=1d
 DEBUG=No
 DRY_RUN=No
+LOG=/var/log/sjob.log
 
 CMD_JOB1="Envía a servidor alterno los logs numerados de /db2/logs"
 CMD_SOURCE1="/db2/logs"
@@ -272,3 +278,33 @@ Jun 26 17:52:13 rhel10 systemd[1]: Stopped filemover.service - sjob File Mover S
 ```
 
 **Nota:** Arriba muestra registros de una ejecución con configuración que incluye `DEBUG=True` por lo que muestra algunos de los nombres de los archivos procesados y numerosos mensajes.
+
+## Ejemplo de archivo de registro
+
+Habiendo ejecutado con una configuración que incluye `LOG=/nombre/de/un/registro.log`:
+
+```text
+[2026-07-27 16:36:04] === STARTING SJOB ===
+[2026-07-27 16:36:04] Executable: ./sjob-linux-x86_64
+[2026-07-27 16:36:04] Configuration file: sjob.full.conf
+[2026-07-27 16:36:04] DEBUG: true
+[2026-07-27 16:36:04] DRY_RUN: true
+[2026-07-27 16:36:04] LOOP: 30
+[2026-07-27 16:36:04] START_TIME: 16:37
+[2026-07-27 16:37:00] Title of Job: Mover *PARES* de \"uno\" a \"dos\"
+[2026-07-27 16:37:00] Filter: Expr='[02468]*', Older=0s, Newer=0s
+[2026-07-27 16:37:00] Number of files found: 80
+[2026-07-27 16:37:00]  + uno/019f05dc-7124-74a9-b30c-ed8e5d1b3ec7.txt
+[2026-07-27 16:37:00]  + uno/019f05dc-7129-7045-858f-fe6142cf531f.txt
+[2026-07-27 16:37:00]  + uno/019f05dc-712d-748b-a128-968b212dfba7.txt
+[2026-07-27 16:37:00]  + uno/019f05dc-712f-7a26-be45-2ecadd1bce4c.txt
+[2026-07-27 16:37:00]  + uno/019f05dc-7132-7ab4-a564-d626c4a473da.txt
+[2026-07-27 16:37:00]  + uno/019f05dc-7135-7ebf-b04a-550c4d0d0928.txt
+[2026-07-27 16:37:00]  + uno/019f05dc-7138-764d-889a-08e9c5233dfa.txt
+[2026-07-27 16:37:00]  + uno/019f05dc-713b-72a0-bc53-79faaea057fc.txt
+[2026-07-27 16:37:00]  + uno/019f05dc-713e-7582-b85b-b1bd847f623e.txt
+... continúa ...
+
+```
+
+Nótese que cada archivo procesado se registra con un ` +` (espacio y más) cuando se procesó (copió, movió, removió) con éxito, o con un ` !` (espacio y admiración) cuando el intento falló (no copió, movió o removió).
