@@ -3,6 +3,7 @@
 #include <fcntl.h>
 #include <glob.h>
 #include <libgen.h>
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -60,6 +61,9 @@ typedef struct {
   char timefmt[MAX_STR];
   bool strip_ts;
   int start_time_sec; // Added for START_HOUR / START_TIME tracking
+
+  char log_file[MAX_STR];
+  FILE *log_fp;
 
   Job jobs[MAX_JOBS];
   int max_job_id;
@@ -160,6 +164,27 @@ void log_msg(Config *cfg, const char *msg) {
     printf("[%s] %s\n", t_str, msg);
   }
   fflush(stdout);
+}
+
+// Write to the persistent log file natively
+void write_ext_log(Config *cfg, const char *format, ...) {
+  if (!cfg->log_fp)
+    return;
+
+  time_t now = time(NULL);
+  struct tm *t = localtime(&now);
+  char t_str[MAX_STR];
+  strftime(t_str, sizeof(t_str), cfg->timefmt, t);
+
+  fprintf(cfg->log_fp, "[%s] ", t_str);
+
+  va_list args;
+  va_start(args, format);
+  vfprintf(cfg->log_fp, format, args);
+  va_end(args);
+
+  fprintf(cfg->log_fp, "\n");
+  fflush(cfg->log_fp);
 }
 
 void mkdir_p(const char *path) {
@@ -350,6 +375,7 @@ void parse_config(const char *filepath, Config *cfg) {
   memset(cfg, 0, sizeof(Config));
   strcpy(cfg->timefmt, "%Y-%m-%d %H:%M:%S");
   cfg->start_time_sec = -1; // Default to unused
+  cfg->log_fp = NULL;
 
   for (int i = 0; i < MAX_JOBS; i++) {
     cfg->jobs[i].id = -1;
@@ -385,6 +411,8 @@ void parse_config(const char *filepath, Config *cfg) {
       cfg->loop = parse_time_str(val, 60);
     else if (strcmp(key, "TIMEFMT") == 0)
       strcpy(cfg->timefmt, val);
+    else if (strcmp(key, "LOG") == 0)
+      strcpy(cfg->log_file, val);
     else if (strcmp(key, "START_HOUR") == 0 || strcmp(key, "START_TIME") == 0)
       cfg->start_time_sec = parse_start_hour(val);
     else {
@@ -524,6 +552,12 @@ void process_jobs(Config *cfg) {
       log_msg(cfg, msg);
     }
 
+    // Dump Job Data to External Log
+    write_ext_log(cfg, "Title of Job: %s", j->title);
+    write_ext_log(cfg, "Filter: Expr='%s', Older=%ds, Newer=%ds", j->expr,
+                  j->older, j->newer);
+    write_ext_log(cfg, "Number of files found: %d", files_found);
+
     // Execute PRE-execution hook command if specified.
     // Must return true (exit code 0) for job execution to continue.
     if (!run_hook(cfg, "PRE", j->pre_cmd)) {
@@ -531,6 +565,7 @@ void process_jobs(Config *cfg) {
                "WARNING: PRE hook failed for job '%s'. Skipping job.",
                j->title);
       log_msg(cfg, msg);
+      write_ext_log(cfg, "WARNING: PRE hook failed. Skipping job.");
 
       if (valid_files) {
         for (int f = 0; f < files_found; f++)
@@ -550,18 +585,32 @@ void process_jobs(Config *cfg) {
         base = base ? base + 1 : valid_files[f];
 
         snprintf(target_path, sizeof(target_path), "%s/%s", j->target, base);
+
+        int res = 0;
         if (!cfg->dry_run) {
           if (j->type == JOB_COPY) {
-            copy_file_preserve(valid_files[f], target_path);
+            res = copy_file_preserve(valid_files[f], target_path);
           } else {
-            move_file_preserve(valid_files[f], target_path);
+            res = move_file_preserve(valid_files[f], target_path);
           }
         }
+
+        if (res == 0)
+          write_ext_log(cfg, " + %s", valid_files[f]);
+        else
+          write_ext_log(cfg, " ! %s", valid_files[f]);
       }
     } else if (j->type == JOB_REMOVE) {
       for (int f = 0; f < files_found; f++) {
-        if (!cfg->dry_run)
-          unlink(valid_files[f]);
+        int res = 0;
+        if (!cfg->dry_run) {
+          res = unlink(valid_files[f]);
+        }
+
+        if (res == 0)
+          write_ext_log(cfg, " + %s", valid_files[f]);
+        else
+          write_ext_log(cfg, " ! %s", valid_files[f]);
       }
     } else if (j->type == JOB_CMD && files_found > 0) {
       if (j->multiple) {
@@ -586,8 +635,21 @@ void process_jobs(Config *cfg) {
             free(cmd_msg);
           }
         }
-        if (!cfg->dry_run)
-          system(cmd_to_run);
+
+        int res = 0;
+        if (!cfg->dry_run) {
+          res = system(cmd_to_run);
+        }
+
+        bool success = (cfg->dry_run ||
+                        (res != -1 && WIFEXITED(res) && WEXITSTATUS(res) == 0));
+        for (int f = 0; f < files_found; f++) {
+          if (success)
+            write_ext_log(cfg, " + %s", valid_files[f]);
+          else
+            write_ext_log(cfg, " ! %s", valid_files[f]);
+        }
+
         free(all_files);
       } else {
         for (int f = 0; f < files_found; f++) {
@@ -605,8 +667,18 @@ void process_jobs(Config *cfg) {
               free(cmd_msg);
             }
           }
-          if (!cfg->dry_run)
-            system(cmd_to_run);
+
+          int res = 0;
+          if (!cfg->dry_run) {
+            res = system(cmd_to_run);
+          }
+
+          bool success = (cfg->dry_run || (res != -1 && WIFEXITED(res) &&
+                                           WEXITSTATUS(res) == 0));
+          if (success)
+            write_ext_log(cfg, " + %s", valid_files[f]);
+          else
+            write_ext_log(cfg, " ! %s", valid_files[f]);
         }
       }
     }
@@ -645,6 +717,43 @@ int main(int argc, char *argv[]) {
   }
 
   parse_config(argv[optind], &cfg);
+
+  // Set up the persistent logging file stream
+  if (strlen(cfg.log_file) > 0) {
+    char tmp_path[MAX_STR];
+    strncpy(tmp_path, cfg.log_file, MAX_STR);
+    char *dir = dirname(tmp_path);
+
+    // Ensure target directory exists
+    if (strcmp(dir, ".") != 0 && strcmp(dir, "/") != 0) {
+      mkdir_p(dir);
+    }
+
+    cfg.log_fp = fopen(cfg.log_file, "a");
+    if (!cfg.log_fp) {
+      fprintf(stderr,
+              "FATAL ERROR: Cannot create or open log file '%s' (System Error: "
+              "%s)\n",
+              cfg.log_file, strerror(errno));
+      exit(1);
+    }
+  }
+
+  // Dump Global Metadata to Log
+  write_ext_log(&cfg, "=== STARTING SJOB ===");
+  write_ext_log(&cfg, "Executable: %s", argv[0]);
+  write_ext_log(&cfg, "Configuration file: %s", argv[optind]);
+  write_ext_log(&cfg, "DEBUG: %s", cfg.debug ? "true" : "false");
+  write_ext_log(&cfg, "DRY_RUN: %s", cfg.dry_run ? "true" : "false");
+  write_ext_log(&cfg, "LOOP: %d", cfg.loop);
+
+  if (cfg.start_time_sec >= 0) {
+    int h = cfg.start_time_sec / 3600;
+    int m = (cfg.start_time_sec % 3600) / 60;
+    write_ext_log(&cfg, "START_TIME: %02d:%02d", h, m);
+  } else {
+    write_ext_log(&cfg, "START_TIME: [Immediate Execution]");
+  }
 
   if (cfg.debug) {
     log_msg(&cfg, "========= INITIALIZING JOB RUNNER =========");
@@ -715,5 +824,8 @@ int main(int argc, char *argv[]) {
     }
   }
 
+  if (cfg.log_fp) {
+    fclose(cfg.log_fp);
+  }
   return 0;
 }
